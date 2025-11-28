@@ -14,20 +14,26 @@ export async function GET(request: NextRequest) {
 
         const userId = parseInt(session.user.id);
 
-        const history = await db
-            .select()
+        const histories = await db
+            .select({
+                id: chatHistories.id,
+                title: chatHistories.title,
+                createdAt: chatHistories.createdAt,
+                updatedAt: chatHistories.updatedAt,
+            })
             .from(chatHistories)
             .where(eq(chatHistories.userId, userId))
             .orderBy(desc(chatHistories.updatedAt));
 
-        return NextResponse.json({ history });
+        return NextResponse.json({ histories });
+
     } catch (error) {
-        logger.error({ error }, "Failed to fetch chat history");
-        return NextResponse.json({ error: "Failed to fetch chat history" }, { status: 500 });
+        logger.error({ error }, "Failed to fetch chat histories");
+        return NextResponse.json({ error: "Failed to fetch chat histories" }, { status: 500 });
     }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function POST(request: NextRequest) {
     try {
         const session = await auth();
         if (!session?.user?.id) {
@@ -35,20 +41,17 @@ export async function DELETE(request: NextRequest) {
         }
 
         const userId = parseInt(session.user.id);
-        const { searchParams } = new URL(request.url);
-        const id = searchParams.get("id");
 
-        if (!id) {
-            return NextResponse.json({ error: "Missing id parameter" }, { status: 400 });
-        }
+        const [newChat] = await db.insert(chatHistories).values({
+            userId,
+            title: "New Chat",
+            messages: [],
+        }).returning();
 
-        await db
-            .delete(chatHistories)
-            .where(eq(chatHistories.id, parseInt(id)));
+        return NextResponse.json({ chat: newChat });
 
-        return NextResponse.json({ success: true });
     } catch (error) {
-        logger.error({ error }, "Failed to delete chat history");
-        return NextResponse.json({ error: "Failed to delete chat history" }, { status: 500 });
+        logger.error({ error }, "Failed to create chat history");
+        return NextResponse.json({ error: "Failed to create chat history" }, { status: 500 });
     }
 }

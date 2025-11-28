@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Upload, FileText, Loader2, CheckCircle2, XCircle, Clock, Folder, Plus, Trash2 } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, XCircle, Clock, Folder, Plus, Trash2, ArrowLeft, Book, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface UploadStatus {
@@ -16,6 +16,7 @@ interface Category {
     description: string;
     color: string;
     createdAt: string;
+    documentCount?: number; // Optional, if we add this to API later
 }
 
 interface Document {
@@ -27,21 +28,26 @@ interface Document {
 }
 
 export function KnowledgeManager() {
-    const [activeTab, setActiveTab] = useState<"upload" | "timeline" | "categories">("upload");
-    const [uploads, setUploads] = useState<UploadStatus[]>([]);
-    const [isDragging, setIsDragging] = useState(false);
+    // View State
+    const [view, setView] = useState<"list" | "create" | "details">("list");
+    const [selectedKb, setSelectedKb] = useState<Category | null>(null);
+    const [detailsTab, setDetailsTab] = useState<"documents" | "upload">("documents");
+
+    // Data State
     const [categories, setCategories] = useState<Category[]>([]);
     const [documents, setDocuments] = useState<Document[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>("");
+    const [uploads, setUploads] = useState<UploadStatus[]>([]);
+
+    // UI State
+    const [isDragging, setIsDragging] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState("");
+    const [newCategoryDesc, setNewCategoryDesc] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         fetchCategories();
-        if (activeTab === "timeline") {
-            fetchDocuments();
-        }
-    }, [activeTab]);
+        fetchDocuments(); // We fetch all for now, filter client-side or update API later
+    }, []);
 
     const fetchCategories = async () => {
         try {
@@ -70,11 +76,16 @@ export function KnowledgeManager() {
             const res = await fetch("/api/categories", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: newCategoryName, description: "Created via UI" }),
+                body: JSON.stringify({
+                    name: newCategoryName,
+                    description: newCategoryDesc || "No description"
+                }),
             });
             if (res.ok) {
                 setNewCategoryName("");
+                setNewCategoryDesc("");
                 fetchCategories();
+                setView("list");
             }
         } catch (error) {
             console.error("Failed to create category", error);
@@ -84,7 +95,7 @@ export function KnowledgeManager() {
     };
 
     const handleFileUpload = async (files: FileList | null) => {
-        if (!files || files.length === 0) return;
+        if (!files || files.length === 0 || !selectedKb) return;
 
         const fileArray = Array.from(files);
 
@@ -99,9 +110,7 @@ export function KnowledgeManager() {
             try {
                 const formData = new FormData();
                 formData.append("file", file);
-                if (selectedCategory) {
-                    formData.append("categoryId", selectedCategory);
-                }
+                formData.append("categoryId", selectedKb.id.toString());
 
                 const response = await fetch("/api/ingest", {
                     method: "POST",
@@ -123,6 +132,10 @@ export function KnowledgeManager() {
                             : u
                     )
                 );
+
+                if (response.ok) {
+                    fetchDocuments(); // Refresh list
+                }
             } catch (error) {
                 setUploads((prev) =>
                     prev.map((u) =>
@@ -150,66 +163,218 @@ export function KnowledgeManager() {
         setIsDragging(false);
     };
 
+    const filteredDocuments = selectedKb
+        ? documents.filter(doc => doc.categoryId === selectedKb.id)
+        : [];
+
+    // --- VIEWS ---
+
+    if (view === "list") {
+        return (
+            <div className="space-y-8">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h2 className="text-2xl font-bold text-slate-100">Knowledge Bases</h2>
+                        <p className="text-slate-400">Manage your organized collections of documents</p>
+                    </div>
+                    <button
+                        onClick={() => setView("create")}
+                        className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Create New
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Create New Card (Visual Shortcut) */}
+                    <button
+                        onClick={() => setView("create")}
+                        className="border-2 border-dashed border-slate-700 hover:border-violet-500/50 hover:bg-slate-800/30 rounded-2xl p-6 flex flex-col items-center justify-center gap-4 transition-all group h-48"
+                    >
+                        <div className="w-12 h-12 rounded-full bg-slate-800 group-hover:bg-violet-500/20 flex items-center justify-center transition-colors">
+                            <Plus className="w-6 h-6 text-slate-400 group-hover:text-violet-400" />
+                        </div>
+                        <span className="font-medium text-slate-400 group-hover:text-violet-400">Create Knowledge Base</span>
+                    </button>
+
+                    {categories.map((category) => (
+                        <button
+                            key={category.id}
+                            onClick={() => {
+                                setSelectedKb(category);
+                                setView("details");
+                                setDetailsTab("documents");
+                            }}
+                            className="bg-slate-800/50 border border-slate-700/50 hover:border-violet-500/50 rounded-2xl p-6 text-left transition-all group h-48 flex flex-col"
+                        >
+                            <div className="flex items-start justify-between w-full mb-4">
+                                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                                    <Book className="w-5 h-5 text-violet-400" />
+                                </div>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <ArrowLeft className="w-4 h-4 text-slate-500 rotate-180" />
+                                </div>
+                            </div>
+
+                            <h3 className="text-lg font-bold text-slate-100 mb-2">{category.name}</h3>
+                            <p className="text-sm text-slate-400 line-clamp-2 mb-auto">{category.description}</p>
+
+                            <div className="pt-4 border-t border-slate-700/50 flex items-center gap-2 text-xs text-slate-500">
+                                <Clock className="w-3 h-3" />
+                                Created {new Date(category.createdAt).toLocaleDateString()}
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    if (view === "create") {
+        return (
+            <div className="max-w-2xl mx-auto space-y-8">
+                <button
+                    onClick={() => setView("list")}
+                    className="text-slate-400 hover:text-slate-200 flex items-center gap-2 transition-colors"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to Knowledge Bases
+                </button>
+
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8">
+                    <h2 className="text-2xl font-bold text-slate-100 mb-6">Create New Knowledge Base</h2>
+
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-300">Name</label>
+                            <input
+                                type="text"
+                                value={newCategoryName}
+                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                placeholder="e.g., Computer Science, Project Alpha"
+                                className="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-300">Description</label>
+                            <textarea
+                                value={newCategoryDesc}
+                                onChange={(e) => setNewCategoryDesc(e.target.value)}
+                                placeholder="What is this knowledge base about?"
+                                className="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors h-32 resize-none"
+                            />
+                        </div>
+
+                        <div className="flex gap-4 pt-4">
+                            <button
+                                onClick={handleCreateCategory}
+                                disabled={isLoading || !newCategoryName.trim()}
+                                className="flex-1 bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                                Create Knowledge Base
+                            </button>
+                            <button
+                                onClick={() => setView("list")}
+                                className="px-6 py-3 rounded-xl font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Details View
     return (
         <div className="space-y-6">
+            <div className="flex items-center gap-4 mb-2">
+                <button
+                    onClick={() => setView("list")}
+                    className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                    <ArrowLeft className="w-5 h-5" />
+                </button>
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-100">{selectedKb?.name}</h2>
+                    <p className="text-sm text-slate-400">{selectedKb?.description}</p>
+                </div>
+            </div>
+
             {/* Tabs */}
             <div className="flex gap-4 border-b border-slate-800/50 pb-4">
                 <button
-                    onClick={() => setActiveTab("upload")}
+                    onClick={() => setDetailsTab("documents")}
                     className={cn(
                         "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                        activeTab === "upload"
+                        detailsTab === "documents"
+                            ? "bg-violet-500/10 text-violet-400"
+                            : "text-slate-400 hover:text-slate-100"
+                    )}
+                >
+                    <FileText className="w-4 h-4" />
+                    Documents ({filteredDocuments.length})
+                </button>
+                <button
+                    onClick={() => setDetailsTab("upload")}
+                    className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                        detailsTab === "upload"
                             ? "bg-violet-500/10 text-violet-400"
                             : "text-slate-400 hover:text-slate-100"
                     )}
                 >
                     <Upload className="w-4 h-4" />
-                    Upload
-                </button>
-                <button
-                    onClick={() => setActiveTab("timeline")}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                        activeTab === "timeline"
-                            ? "bg-violet-500/10 text-violet-400"
-                            : "text-slate-400 hover:text-slate-100"
-                    )}
-                >
-                    <Clock className="w-4 h-4" />
-                    Timeline
-                </button>
-                <button
-                    onClick={() => setActiveTab("categories")}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-                        activeTab === "categories"
-                            ? "bg-violet-500/10 text-violet-400"
-                            : "text-slate-400 hover:text-slate-100"
-                    )}
-                >
-                    <Folder className="w-4 h-4" />
-                    Categories
+                    Upload New
                 </button>
             </div>
 
-            {/* Upload Tab */}
-            {activeTab === "upload" && (
-                <div className="space-y-8">
-                    <div className="flex items-center gap-4">
-                        <select
-                            value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-violet-500"
-                        >
-                            <option value="">Select Category (Optional)</option>
-                            {categories.map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                    {cat.name}
-                                </option>
-                            ))}
-                        </select>
+            {detailsTab === "documents" && (
+                <div className="space-y-6">
+                    <div className="relative border-l-2 border-slate-800 ml-3 space-y-8 py-4">
+                        {filteredDocuments.map((doc) => (
+                            <div key={doc.id} className="relative pl-8">
+                                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-900 border-2 border-violet-500" />
+                                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 hover:border-violet-500/50 transition-all">
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <h3 className="text-lg font-semibold text-slate-100">
+                                                {doc.metadata?.filename as string || "Untitled Document"}
+                                            </h3>
+                                            <p className="text-sm text-slate-400">
+                                                Uploaded on {new Date(doc.createdAt).toLocaleDateString()} at {new Date(doc.createdAt).toLocaleTimeString()}
+                                            </p>
+                                        </div>
+                                        <FileText className="w-5 h-5 text-slate-500" />
+                                    </div>
+                                    <div className="mt-4 text-sm text-slate-300 line-clamp-3">
+                                        {doc.content.substring(0, 300)}...
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {filteredDocuments.length === 0 && (
+                            <div className="pl-8 py-8 text-slate-500 flex flex-col items-start gap-4">
+                                <p>No documents found in this knowledge base.</p>
+                                <button
+                                    onClick={() => setDetailsTab("upload")}
+                                    className="text-violet-400 hover:text-violet-300 text-sm font-medium flex items-center gap-2"
+                                >
+                                    <Upload className="w-4 h-4" />
+                                    Upload your first document
+                                </button>
+                            </div>
+                        )}
                     </div>
+                </div>
+            )}
 
+            {detailsTab === "upload" && (
+                <div className="space-y-8">
                     <div
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
@@ -228,10 +393,10 @@ export function KnowledgeManager() {
 
                             <div className="space-y-3">
                                 <h3 className="text-2xl font-bold text-slate-100">
-                                    Upload Documents
+                                    Upload to {selectedKb?.name}
                                 </h3>
                                 <p className="text-base text-slate-400 max-w-md mx-auto leading-relaxed">
-                                    Drag and drop files here, or click to browse
+                                    Drag and drop files here to add them to this knowledge base
                                 </p>
                             </div>
 
@@ -249,9 +414,6 @@ export function KnowledgeManager() {
                                 className="hidden"
                                 accept=".txt,.md,.pdf"
                             />
-                            <p className="text-sm text-slate-500">
-                                Supported formats: TXT, Markdown, PDF
-                            </p>
                         </div>
                     </div>
 
@@ -305,84 +467,6 @@ export function KnowledgeManager() {
                             </div>
                         </div>
                     )}
-                </div>
-            )}
-
-            {/* Categories Tab */}
-            {activeTab === "categories" && (
-                <div className="space-y-6">
-                    <div className="flex gap-4">
-                        <input
-                            type="text"
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            placeholder="New Category Name"
-                            className="flex-1 bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-4 py-2 focus:outline-none focus:border-violet-500"
-                        />
-                        <button
-                            onClick={handleCreateCategory}
-                            disabled={isLoading || !newCategoryName.trim()}
-                            className="bg-violet-600 hover:bg-violet-500 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
-                        >
-                            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {categories.map((category) => (
-                            <div key={category.id} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 hover:border-violet-500/50 transition-all">
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-slate-100">{category.name}</h3>
-                                        <p className="text-sm text-slate-400 mt-1">{category.description}</p>
-                                    </div>
-                                    <Folder className="w-5 h-5 text-violet-400" />
-                                </div>
-                                <div className="mt-4 text-xs text-slate-500">
-                                    Created {new Date(category.createdAt).toLocaleDateString()}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Timeline Tab */}
-            {activeTab === "timeline" && (
-                <div className="space-y-6">
-                    <div className="relative border-l-2 border-slate-800 ml-3 space-y-8 py-4">
-                        {documents.map((doc) => (
-                            <div key={doc.id} className="relative pl-8">
-                                <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-900 border-2 border-violet-500" />
-                                <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 hover:border-violet-500/50 transition-all">
-                                    <div className="flex items-start justify-between">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-3">
-                                                <h3 className="text-lg font-semibold text-slate-100">
-                                                    {doc.metadata?.filename || "Untitled Document"}
-                                                </h3>
-                                                {doc.categoryId && (
-                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20">
-                                                        {categories.find(c => c.id === doc.categoryId)?.name || "Category"}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-sm text-slate-400">
-                                                Uploaded on {new Date(doc.createdAt).toLocaleDateString()} at {new Date(doc.createdAt).toLocaleTimeString()}
-                                            </p>
-                                        </div>
-                                        <FileText className="w-5 h-5 text-slate-500" />
-                                    </div>
-                                    <div className="mt-4 text-sm text-slate-300 line-clamp-3">
-                                        {doc.content.substring(0, 300)}...
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {documents.length === 0 && (
-                            <div className="pl-8 text-slate-500">No documents found. Start uploading!</div>
-                        )}
-                    </div>
                 </div>
             )}
         </div>
