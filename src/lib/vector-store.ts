@@ -10,10 +10,10 @@ export async function getIndex() {
 
     const storageContext = await storageContextFromDefaults({ vectorStore });
 
-    return await VectorStoreIndex.fromVectorStore(vectorStore, storageContext);
+    return await VectorStoreIndex.fromVectorStore(vectorStore);
 }
 
-export async function createIndexFromDocuments(documents: any[]) {
+export async function createIndexFromDocuments(documents: any[], userId?: number) {
     const vectorStore = new PGVectorStore({
         clientConfig: {
             connectionString: process.env.DATABASE_URL,

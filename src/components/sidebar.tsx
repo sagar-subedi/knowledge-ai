@@ -2,17 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, Database, Settings, Brain, LogOut } from "lucide-react";
+import { LayoutDashboard, Database, MessageSquare, Settings, LogOut, Zap, ClipboardList, Brain, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSession, signOut } from "next-auth/react";
 
 const navigation = [
     { name: "Chat", href: "/chat", icon: MessageSquare },
     { name: "Knowledge Base", href: "/knowledge", icon: Database },
+    { name: "Flashcards", href: "/flashcards", icon: Zap },
+    { name: "Quizzes", href: "/quizzes", icon: ClipboardList },
     { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
+    const { data: session } = useSession();
 
     return (
         <div className="flex h-full w-64 flex-col bg-slate-950 border-r border-slate-800/50">
@@ -44,8 +48,27 @@ export function Sidebar() {
                 })}
             </div>
 
-            <div className="p-6 border-t border-slate-800/50">
-                <button className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-all">
+            <div className="p-6 border-t border-slate-800/50 space-y-4">
+                {session?.user && (
+                    <div className="flex items-center gap-3 px-2">
+                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
+                            <User className="w-4 h-4 text-slate-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-200 truncate">
+                                {session.user.name || "User"}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate">
+                                {session.user.email}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                <button
+                    onClick={() => signOut({ callbackUrl: "/login" })}
+                    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-all"
+                >
                     <LogOut className="h-5 w-5" />
                     Sign Out
                 </button>
