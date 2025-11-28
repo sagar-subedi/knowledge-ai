@@ -1,36 +1,145 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Personal Knowledge AI
+
+A powerful Personal Knowledge AI system that ingests your documents, notes, emails, and learning materials, providing conversational access to your entire knowledge base through RAG (Retrieval-Augmented Generation).
+
+## Features
+
+- **📚 Document Ingestion**: Upload and index various document formats (TXT, Markdown, PDF)
+- **💬 Conversational Interface**: Chat with your knowledge base using natural language
+- **🔍 Semantic Search**: Advanced vector-based retrieval for accurate, context-aware responses
+- **📝 Source Citations**: Every answer includes references to the source documents
+- **🎨 Modern UI**: Beautiful, responsive interface with dark mode and smooth animations
+- **🔒 Privacy-First**: Self-hosted with local PostgreSQL database using Docker
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, Tailwind CSS 4
+- **AI/RAG**: LlamaIndexTS, OpenAI GPT-4o
+- **Vector Database**: PostgreSQL with pgvector extension
+- **Database ORM**: Drizzle ORM
+
+## Prerequisites
+
+- Node.js 20+
+- Docker & Docker Compose
+- OpenAI API Key
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone and Install
+
+```bash
+git clone <your-repo>
+cd personal-knowledge-ai
+npm install
+```
+
+### 2. Set up Environment Variables
+
+Copy `.env.example` to `.env.local` and configure:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
+```env
+DATABASE_URL="postgresql://user:password@localhost:5433/knowledge_ai"
+OPENAI_API_KEY="your-openai-api-key-here"
+```
+
+### 3. Start PostgreSQL Database
+
+```bash
+docker compose up -d
+```
+
+This will start a PostgreSQL database with pgvector extension on port 5433.
+
+### 4. Initialize Database
+
+```bash
+DATABASE_URL="postgresql://user:password@localhost:5433/knowledge_ai" npx drizzle-kit push
+```
+
+### 5. Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Usage
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Uploading Documents
 
-## Learn More
+1. Navigate to the **Knowledge Base** tab
+2. Drag and drop files or click "Choose Files"
+3. Supported formats: TXT, Markdown, PDF
+4. Wait for the upload to complete
 
-To learn more about Next.js, take a look at the following resources:
+### Chatting with Your Knowledge
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Go to the **Chat** tab
+2. Type your question in the input field
+3. The AI will search your knowledge base and provide answers with source citations
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+personal-knowledge-ai/
+├── app/
+│   └── api/
+│       ├── chat/         # Chat API endpoint
+│       └── ingest/       # Document ingestion endpoint
+├── components/
+│   ├── chat-interface.tsx      # Chat UI component
+│   └── knowledge-manager.tsx   # Upload UI component
+├── lib/
+│   ├── db/
+│   │   ├── schema.ts     # Database schema
+│   │   └── index.ts      # Database client
+│   ├── llamaindex-config.ts  # LLM configuration
+│   ├── vector-store.ts   # Vector store logic
+│   └── utils.ts          # Utility functions
+├── src/
+│   └── app/
+│       ├── globals.css   # Global styles
+│       ├── layout.tsx    # Root layout
+│       └── page.tsx      # Main page
+├── docker-compose.yml    # PostgreSQL setup
+└── drizzle.config.ts     # Drizzle ORM config
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Database Management
+
+View database:
+```bash
+docker exec -it personal-knowledge-ai-db-1 psql -U user -d knowledge_ai
+```
+
+Stop database:
+```bash
+docker compose down
+```
+
+### Building for Production
+
+```bash
+npm run build
+npm start
+```
+
+## License
+
+MIT
+
+## Acknowledgments
+
+- Built with [LlamaIndexTS](https://ts.llamaindex.ai/)
+- Powered by [OpenAI](https://openai.com/)
+- UI inspired by modern AI chat interfaces
