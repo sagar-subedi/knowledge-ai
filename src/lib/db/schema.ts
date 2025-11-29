@@ -30,11 +30,23 @@ export const categories = pgTable('categories', {
     updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Flashcards table (SRS)
-export const flashcards = pgTable('flashcards', {
+// Decks table (hierarchical)
+export const decks = pgTable('decks', {
     id: serial('id').primaryKey(),
     userId: integer('user_id').references(() => users.id).notNull(),
     categoryId: integer('category_id').references(() => categories.id).notNull(),
+    parentDeckId: integer('parent_deck_id').references((): any => decks.id),
+    name: varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Flashcards table (SRS) - now references decks
+export const flashcards = pgTable('flashcards', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id).notNull(),
+    deckId: integer('deck_id').references(() => decks.id).notNull(),
     front: text('front').notNull(),
     back: text('back').notNull(),
     // SRS fields (SuperMemo-2 based)
@@ -44,6 +56,29 @@ export const flashcards = pgTable('flashcards', {
     repetitions: integer('repetitions').default(0),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Study sessions
+export const studySessions = pgTable('study_sessions', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id).notNull(),
+    deckId: integer('deck_id').references(() => decks.id).notNull(),
+    startedAt: timestamp('started_at').defaultNow(),
+    completedAt: timestamp('completed_at'),
+    cardsReviewed: integer('cards_reviewed').default(0),
+    cardsTotal: integer('cards_total').default(0),
+    isActive: boolean('is_active').default(true),
+});
+
+// Card reviews (history)
+export const cardReviews = pgTable('card_reviews', {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id).notNull(),
+    flashcardId: integer('flashcard_id').references(() => flashcards.id).notNull(),
+    sessionId: integer('session_id').references(() => studySessions.id),
+    rating: integer('rating').notNull(), // 1=Again, 2=Hard, 3=Good, 4=Easy
+    timeTakenMs: integer('time_taken_ms'),
+    reviewedAt: timestamp('reviewed_at').defaultNow(),
 });
 
 // Documents - updated with user_id and category_id
