@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { decks, flashcards } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { logger } from "@/lib/logger";
+
+// Helper to recursively get all descendant deck IDs
+async function getDescendantDeckIds(deckId: number): Promise<number[]> {
+    const subdecks = await db
+        .select({ id: decks.id })
+        .from(decks)
+        .where(eq(decks.parentDeckId, deckId));
+
+    let ids: number[] = [];
+    for (const subdeck of subdecks) {
+        ids.push(subdeck.id);
+        const childIds = await getDescendantDeckIds(subdeck.id);
+        ids = [...ids, ...childIds];
+    }
+    return ids;
+}
 
 export async function GET(
     request: NextRequest,
@@ -28,11 +44,20 @@ export async function GET(
             return NextResponse.json({ error: "Deck not found" }, { status: 404 });
         }
 
-        // Get card counts
-        const [cardCount] = await db
+        // Get own card count
+        const [ownCardCount] = await db
             .select({ count: sql<number>`count(*)` })
             .from(flashcards)
             .where(eq(flashcards.deckId, deckId));
+
+        // Get total card count (including subdecks)
+        const descendantIds = await getDescendantDeckIds(deckId);
+        const allDeckIds = [deckId, ...descendantIds];
+
+        const [totalCardCount] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(flashcards)
+            .where(inArray(flashcards.deckId, allDeckIds));
 
         // Get subdeck count
         const [subdeckCount] = await db
@@ -43,7 +68,8 @@ export async function GET(
         return NextResponse.json({
             deck: {
                 ...deck,
-                cardCount: Number(cardCount.count),
+                ownCardCount: Number(ownCardCount.count),
+                totalCardCount: Number(totalCardCount.count),
                 subdeckCount: Number(subdeckCount.count),
             }
         });

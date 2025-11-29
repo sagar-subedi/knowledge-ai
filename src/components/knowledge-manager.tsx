@@ -43,6 +43,8 @@ export function KnowledgeManager() {
     const [newCategoryName, setNewCategoryName] = useState("");
     const [newCategoryDesc, setNewCategoryDesc] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [tocMode, setTocMode] = useState<"skip" | "auto" | "manual">("skip");
+    const [manualTocJson, setManualTocJson] = useState("");
 
     useEffect(() => {
         fetchCategories();
@@ -111,6 +113,10 @@ export function KnowledgeManager() {
                 const formData = new FormData();
                 formData.append("file", file);
                 formData.append("categoryId", selectedKb.id.toString());
+                formData.append("tocMode", tocMode);
+                if (tocMode === "manual" && manualTocJson.trim()) {
+                    formData.append("manualToc", manualTocJson);
+                }
 
                 const response = await fetch("/api/ingest", {
                     method: "POST",
@@ -375,6 +381,75 @@ export function KnowledgeManager() {
 
             {detailsTab === "upload" && (
                 <div className="space-y-8">
+                    {/* TOC Mode Selector */}
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 space-y-4">
+                        <h4 className="text-lg font-semibold text-slate-100">Table of Contents (TOC)</h4>
+                        <div className="space-y-3">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="tocMode"
+                                    value="skip"
+                                    checked={tocMode === "skip"}
+                                    onChange={(e) => setTocMode(e.target.value as "skip")}
+                                    className="w-4 h-4 text-violet-600"
+                                />
+                                <div>
+                                    <span className="text-slate-200 font-medium">Skip</span>
+                                    <p className="text-sm text-slate-400">No TOC extraction (fastest)</p>
+                                </div>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="tocMode"
+                                    value="auto"
+                                    checked={tocMode === "auto"}
+                                    onChange={(e) => setTocMode(e.target.value as "auto")}
+                                    className="w-4 h-4 text-violet-600"
+                                />
+                                <div>
+                                    <span className="text-slate-200 font-medium">Auto Extract</span>
+                                    <p className="text-sm text-slate-400">LLM-powered extraction (+2-5s)</p>
+                                </div>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="radio"
+                                    name="tocMode"
+                                    value="manual"
+                                    checked={tocMode === "manual"}
+                                    onChange={(e) => setTocMode(e.target.value as "manual")}
+                                    className="w-4 h-4 text-violet-600"
+                                />
+                                <div>
+                                    <span className="text-slate-200 font-medium">Manual</span>
+                                    <p className="text-sm text-slate-400">Provide pre-formatted TOC JSON</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        {tocMode === "manual" && (
+                            <div className="space-y-2">
+                                <label className="text-sm text-slate-300">TOC JSON</label>
+                                <textarea
+                                    value={manualTocJson}
+                                    onChange={(e) => setManualTocJson(e.target.value)}
+                                    placeholder='[{"title":"Introduction","level":1,"startChar":0,"endChar":1250}]'
+                                    className="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-4 py-3 focus:outline-none focus:border-violet-500 font-mono text-sm h-32 resize-none"
+                                />
+                                <a
+                                    href="/docs/TOC_FORMAT.md"
+                                    target="_blank"
+                                    className="text-xs text-violet-400 hover:text-violet-300"
+                                >
+                                    View TOC format documentation →
+                                </a>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* File Upload Area */}
                     <div
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}

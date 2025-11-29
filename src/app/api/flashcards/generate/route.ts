@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { documents, flashcards } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { documents, flashcards, decks } from "@/lib/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { OpenAI } from "@llamaindex/openai";
 import { logger } from "@/lib/logger";
+import { extractMultipleSections, TOCSection } from "@/lib/toc-extractor";
 
 export async function POST(request: NextRequest) {
     try {
@@ -14,42 +15,108 @@ export async function POST(request: NextRequest) {
         }
 
         const userId = parseInt(session.user.id);
-        const { categoryId } = await request.json();
+        const { deckId, count = 5, documentIds, sections } = await request.json();
 
-        if (!categoryId) {
-            return NextResponse.json({ error: "Category ID is required" }, { status: 400 });
+        if (!deckId) {
+            return NextResponse.json({ error: "Deck ID is required" }, { status: 400 });
         }
 
-        // Fetch documents for the category
-        const categoryDocs = await db
+        // Verify deck exists and get its categoryId
+        const [deck] = await db
             .select()
-            .from(documents)
-            .where(and(eq(documents.userId, userId), eq(documents.categoryId, categoryId)))
-            .limit(5); // Limit to 5 docs for now to avoid token limits
+            .from(decks)
+            .where(and(eq(decks.id, deckId), eq(decks.userId, userId)));
 
-        logger.info({ userId, categoryId, docsFound: categoryDocs.length }, "Fetching docs for flashcard generation");
-
-        if (categoryDocs.length === 0) {
-            return NextResponse.json({ error: "No documents found in this category" }, { status: 404 });
+        if (!deck) {
+            return NextResponse.json({ error: "Deck not found" }, { status: 404 });
         }
 
-        // Combine text
-        const context = categoryDocs.map(d => d.content).join("\n\n").substring(0, 10000); // Truncate context
+        // Fetch documents
+        let docs;
+        if (documentIds && documentIds.length > 0) {
+            // Fetch specific documents
+            docs = await db
+                .select()
+                .from(documents)
+                .where(and(
+                    eq(documents.userId, userId),
+                    inArray(documents.id, documentIds)
+                ));
+        } else {
+            // Fetch documents for the category (fallback)
+            docs = await db
+                .select()
+                .from(documents)
+                .where(and(eq(documents.userId, userId), eq(documents.categoryId, deck.categoryId)))
+                .limit(5);
+        }
+
+        logger.info({
+            userId,
+            deckId,
+            categoryId: deck.categoryId,
+            docsFound: docs.length,
+            specificDocs: !!documentIds
+        }, "Fetching docs for flashcard generation");
+
+        if (docs.length === 0) {
+            return NextResponse.json({ error: "No documents found" }, { status: 404 });
+        }
+
+        // Prepare context content
+        let context = "";
+
+        if (sections && sections.length > 0) {
+            // Extract specific sections
+            const contentParts = [];
+
+            for (const doc of docs) {
+                const docSections = sections.find((s: any) => s.documentId === doc.id);
+
+                if (docSections && doc.toc) {
+                    // Get specific sections from TOC
+                    const tocSections = (doc.toc as TOCSection[]).filter((_, idx) =>
+                        docSections.sectionIndexes.includes(idx)
+                    );
+
+                    if (tocSections.length > 0) {
+                        const extractedText = extractMultipleSections(doc.content, tocSections);
+                        contentParts.push(`From ${(doc.metadata as any)?.filename || 'Document'}:\n${extractedText}`);
+                    } else {
+                        // Fallback if no valid sections found in TOC
+                        contentParts.push(`From ${(doc.metadata as any)?.filename || 'Document'}:\n${doc.content.substring(0, 2000)}`);
+                    }
+                } else if (documentIds?.includes(doc.id)) {
+                    // If doc selected but no specific sections, use full content (truncated)
+                    contentParts.push(`From ${(doc.metadata as any)?.filename || 'Document'}:\n${doc.content.substring(0, 5000)}`);
+                }
+            }
+
+            context = contentParts.join("\n\n");
+        } else {
+            // Use full content of selected documents (truncated)
+            context = docs
+                .map(d => `From ${(d.metadata as any)?.filename || 'Document'}:\n${d.content}`)
+                .join("\n\n")
+                .substring(0, 15000); // Increased limit for specific docs
+        }
+
+        if (!context.trim()) {
+            return NextResponse.json({ error: "No content available from selected documents/sections" }, { status: 400 });
+        }
 
         // Generate flashcards using OpenAI
         const llm = new OpenAI({ model: "gpt-4o" });
 
-        const prompt = `
-            You are an expert tutor.Create 5 high - quality flashcards based on the following text.
-            Each flashcard should have a "front"(question / concept) and a "back"(answer / explanation).
-            Focus on key concepts, definitions, and important details.
-            
-            Return the result as a JSON array of objects with "front" and "back" keys.
-            Do not include any markdown formatting or code blocks, just the raw JSON string.
+        const prompt = `You are an expert tutor. Create ${count} high-quality flashcards based on the following text.
+Each flashcard should have a "front" (question/concept) and a "back" (answer/explanation).
+Focus on key concepts, definitions, and important details.
 
-    Text:
-            ${context}
-`;
+Return the result as a JSON array of objects with "front" and "back" keys.
+Do not include any markdown formatting or code blocks, just the raw JSON string.
+
+Text:
+${context}`;
 
         const response = await llm.complete({ prompt });
         const text = response.text;
@@ -70,7 +137,7 @@ export async function POST(request: NextRequest) {
             cards.map(card =>
                 db.insert(flashcards).values({
                     userId,
-                    categoryId,
+                    deckId,
                     front: card.front,
                     back: card.back,
                 }).returning()

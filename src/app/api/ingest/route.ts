@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { documents } from "@/lib/db/schema";
 import { logDocumentUpload, logError } from "@/lib/activity-logger";
 import { logger } from "@/lib/logger";
+import { extractTOC } from "@/lib/toc-extractor";
 
 export async function POST(request: NextRequest) {
     const startTime = Date.now();
@@ -22,21 +23,40 @@ export async function POST(request: NextRequest) {
         const formData = await request.formData();
         const file = formData.get("file") as File;
         const categoryId = formData.get("categoryId") ? parseInt(formData.get("categoryId") as string) : null;
+        const tocMode = (formData.get("tocMode") as string) || "skip"; // "skip", "auto", or "manual"
+        const manualToc = formData.get("manualToc") ? JSON.parse(formData.get("manualToc") as string) : null;
 
         if (!file) {
             return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
         }
 
-        logger.info({ userId, filename: file.name, size: file.size, categoryId }, "Starting document ingestion");
+        logger.info({ userId, filename: file.name, size: file.size, categoryId, tocMode }, "Starting document ingestion");
 
         // Read file content
         const text = await file.text();
+
+        // Handle TOC based on mode
+        let toc = null;
+        if (tocMode === "manual" && manualToc) {
+            // User provided TOC
+            toc = manualToc;
+            logger.info({ userId, filename: file.name, tocSections: toc.length }, "Using manual TOC");
+        } else if (tocMode === "auto") {
+            // Extract TOC using LLM
+            logger.info({ userId, filename: file.name }, "Extracting TOC from document");
+            toc = await extractTOC(text);
+            logger.info({ userId, filename: file.name, tocSections: toc.length }, "TOC extraction completed");
+        } else {
+            // Skip TOC extraction
+            logger.info({ userId, filename: file.name }, "Skipping TOC extraction");
+        }
 
         // Save document to database first
         const [dbDocument] = await db.insert(documents).values({
             userId,
             categoryId,
             content: text,
+            toc, // Store extracted/manual TOC or null
             metadata: {
                 filename: file.name,
                 mimeType: file.type,

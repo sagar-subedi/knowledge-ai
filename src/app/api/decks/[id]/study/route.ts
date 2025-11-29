@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { flashcards, studySessions, cardReviews } from "@/lib/db/schema";
-import { eq, and, lte, or } from "drizzle-orm";
+import { flashcards, studySessions, cardReviews, decks } from "@/lib/db/schema";
+import { eq, and, lte, or, inArray } from "drizzle-orm";
 import { logger } from "@/lib/logger";
+
+// Helper function to get all descendant deck IDs (recursive)
+async function getDescendantDeckIds(deckId: number, userId: number): Promise<number[]> {
+    const allDeckIds = [deckId];
+    
+    // Get direct children
+    const children = await db
+        .select()
+        .from(decks)
+        .where(and(
+            eq(decks.parentDeckId, deckId),
+            eq(decks.userId, userId)
+        ));
+    
+    // Recursively get descendants
+    for (const child of children) {
+        const descendants = await getDescendantDeckIds(child.id, userId);
+        allDeckIds.push(...descendants);
+    }
+    
+    return allDeckIds;
+}
 
 // SM-2 Algorithm for spaced repetition
 function calculateNextReview(
@@ -61,6 +83,9 @@ export async function GET(
         const { id } = await params;
         const deckId = parseInt(id);
 
+        // Get all descendant deck IDs (includes current deck)
+        const deckIds = await getDescendantDeckIds(deckId, userId);
+
         // Get or create active study session
         let [activeSession] = await db
             .select()
@@ -73,23 +98,23 @@ export async function GET(
 
         const now = new Date();
 
-        // Get new cards (never reviewed)
+        // Get new cards (never reviewed) from this deck and all subdecks
         const newCards = await db
             .select()
             .from(flashcards)
             .where(and(
-                eq(flashcards.deckId, deckId),
+                inArray(flashcards.deckId, deckIds),
                 eq(flashcards.userId, userId),
                 eq(flashcards.repetitions, 0)
             ))
             .limit(20);
 
-        // Get due cards (nextReviewAt <= now and repetitions > 0)
+        // Get due cards (nextReviewAt <= now and repetitions > 0) from this deck and all subdecks
         const dueCards = await db
             .select()
             .from(flashcards)
             .where(and(
-                eq(flashcards.deckId, deckId),
+                inArray(flashcards.deckId, deckIds),
                 eq(flashcards.userId, userId),
                 lte(flashcards.nextReviewAt, now),
                 or(

@@ -76,12 +76,7 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
             });
 
             if (res.ok) {
-                // Move to next card
-                if (currentCardIndex < allCards.length - 1) {
-                    setCurrentCardIndex(currentCardIndex + 1);
-                    setIsFlipped(false);
-                    setReviewStartTime(Date.now());
-                } else {
+                if (currentCardIndex >= allCards.length - 1) {
                     // Session complete
                     setSession(null);
                 }
@@ -180,10 +175,7 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
                     )}
                 >
                     {/* Front */}
-                    <div className={cn(
-                        "absolute inset-0 backface-hidden bg-slate-800/50 border-2 border-slate-700/50 rounded-2xl p-12 flex flex-col items-center justify-center",
-                        !isFlipped ? "block" : "hidden"
-                    )}>
+                    <div className="absolute inset-0 backface-hidden bg-slate-800/50 border-2 border-slate-700/50 rounded-2xl p-12 flex flex-col items-center justify-center">
                         <div className="text-center space-y-4">
                             <p className="text-sm text-slate-500 uppercase tracking-wide">Question</p>
                             <p className="text-2xl text-slate-100 leading-relaxed whitespace-pre-wrap">
@@ -194,10 +186,7 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
                     </div>
 
                     {/* Back */}
-                    <div className={cn(
-                        "absolute inset-0 backface-hidden bg-gradient-to-br from-violet-900/30 to-fuchsia-900/30 border-2 border-violet-500/50 rounded-2xl p-12 flex flex-col items-center justify-center",
-                        isFlipped ? "block" : "hidden"
-                    )}>
+                    <div className="absolute inset-0 backface-hidden rotate-y-180 bg-gradient-to-br from-violet-900/30 to-fuchsia-900/30 border-2 border-violet-500/50 rounded-2xl p-12 flex flex-col items-center justify-center">
                         <div className="text-center space-y-4">
                             <p className="text-sm text-violet-400 uppercase tracking-wide">Answer</p>
                             <p className="text-2xl text-slate-100 leading-relaxed whitespace-pre-wrap">

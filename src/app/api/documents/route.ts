@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
                 categoryId: documents.categoryId,
                 categoryName: categories.name,
                 categoryColor: categories.color,
+                toc: documents.toc,
             })
             .from(documents)
             .leftJoin(categories, eq(documents.categoryId, categories.id))

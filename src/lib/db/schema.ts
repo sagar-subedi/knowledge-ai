@@ -88,6 +88,7 @@ export const documents = pgTable('documents', {
     categoryId: integer('category_id').references(() => categories.id), // Optional category
     content: text('content').notNull(),
     metadata: jsonb('metadata'),
+    toc: jsonb('toc'), // Table of contents metadata
     createdAt: timestamp('created_at').defaultNow(),
 });
 

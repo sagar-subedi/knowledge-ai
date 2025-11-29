@@ -1,11 +1,13 @@
-import type { NextAuthConfig } from "next-auth";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-export const authConfig: NextAuthConfig = {
+export const { handlers, auth, signIn, signOut } = NextAuth({
+    ...authConfig,
     providers: [
         Credentials({
             credentials: {
@@ -44,39 +46,4 @@ export const authConfig: NextAuthConfig = {
             },
         }),
     ],
-    pages: {
-        signIn: "/login",
-    },
-    callbacks: {
-        authorized({ auth, request: { nextUrl } }) {
-            const isLoggedIn = !!auth?.user;
-            const isOnDashboard = nextUrl.pathname.startsWith("/chat") ||
-                nextUrl.pathname.startsWith("/knowledge") ||
-                nextUrl.pathname.startsWith("/settings");
-
-            if (isOnDashboard) {
-                if (isLoggedIn) return true;
-                return false; // Redirect unauthenticated users to login page
-            } else if (isLoggedIn) {
-                return Response.redirect(new URL("/chat", nextUrl));
-            }
-            return true;
-        },
-        jwt({ token, user }) {
-            if (user) {
-                token.id = user.id;
-            }
-            return token;
-        },
-        session({ session, token }) {
-            if (token && session.user) {
-                session.user.id = token.id as string;
-            }
-            return session;
-        },
-    },
-    session: {
-        strategy: "jwt",
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-    },
-};
+});
