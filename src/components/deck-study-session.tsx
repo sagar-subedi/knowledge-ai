@@ -34,9 +34,11 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [reviewStartTime, setReviewStartTime] = useState<number>(Date.now());
 
-    const allCards = [...newCards, ...dueCards];
-    const currentCard = allCards[currentCardIndex];
-    const cardsRemaining = allCards.length - currentCardIndex;
+    const [queue, setQueue] = useState<Flashcard[]>([]);
+    const [cardsMastered, setCardsMastered] = useState(0);
+
+    const currentCard = queue[currentCardIndex];
+    const cardsRemaining = queue.length - currentCardIndex;
 
     useEffect(() => {
         fetchStudySession();
@@ -48,9 +50,14 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
             const res = await fetch(`/api/decks/${deckId}/study`);
             const data = await res.json();
 
-            if (data.session) setSession(data.session);
-            if (data.newCards) setNewCards(data.newCards);
-            if (data.dueCards) setDueCards(data.dueCards);
+            if (data.session) {
+                setSession(data.session);
+                setCardsMastered(data.session.cardsReviewed || 0);
+            }
+            if (data.newCards || data.dueCards) {
+                const combined = [...(data.newCards || []), ...(data.dueCards || [])];
+                setQueue(combined);
+            }
         } catch (error) {
             console.error("Failed to fetch study session", error);
         } finally {
@@ -76,9 +83,37 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
             });
 
             if (res.ok) {
-                if (currentCardIndex >= allCards.length - 1) {
-                    // Session complete
+                // Handle re-queueing for Again/Hard
+                if (rating < 3) {
+                    const reQueuedCard = { ...currentCard };
+                    setQueue(prev => {
+                        const newQueue = [...prev];
+                        // Insert 10 positions later, or at end if fewer
+                        const insertIndex = Math.min(newQueue.length, currentCardIndex + 10);
+                        newQueue.splice(insertIndex, 0, reQueuedCard);
+                        return newQueue;
+                    });
+                } else {
+                    setCardsMastered(prev => prev + 1);
+                }
+
+                // Always move to next index to trigger "Session Complete" view when done
+                setCurrentCardIndex(prev => prev + 1);
+                setIsFlipped(false);
+                setReviewStartTime(Date.now());
+
+                // Check if we are at the end of the queue
+                // Note: We check queue.length because it might have grown
+                if (currentCardIndex >= queue.length - 1 && rating >= 3) {
+                    // Only finish if this was the last card AND it was mastered (or we just check index vs new length)
+                    // Actually, the effect of setQueue is async, so we can't rely on queue.length immediately here if we just updated it.
+                    // But if rating >= 3, we didn't update queue, so it's safe.
+                    // If rating < 3, we added a card, so we are definitely NOT done.
                     setSession(null);
+                } else if (currentCardIndex >= queue.length - 1 && rating < 3) {
+                    // We are at the end but just added a card. The effect will update queue, 
+                    // and the next render will show the new card at the next index.
+                    // So we don't set session null.
                 }
             }
         } catch (error) {
@@ -96,7 +131,7 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
         );
     }
 
-    if (allCards.length === 0) {
+    if (queue.length === 0 && !isLoading) {
         return (
             <div className="text-center py-12 space-y-6">
                 <div className="w-20 h-20 mx-auto bg-gradient-to-br from-emerald-500 to-teal-500 rounded-full flex items-center justify-center">
@@ -156,7 +191,7 @@ export function DeckStudySession({ deckId, onBack }: DeckStudySessionProps) {
             <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div
                     className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300"
-                    style={{ width: `${((currentCardIndex) / allCards.length) * 100}%` }}
+                    style={{ width: `${(cardsMastered / (session?.cardsTotal || queue.length || 1)) * 100}%` }}
                 />
             </div>
 

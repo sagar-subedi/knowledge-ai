@@ -13,7 +13,8 @@ interface Deck {
     ownCardCount?: number;
     totalCardCount?: number;
     newCount?: number;
-    dueCount?: number;
+    learningCount?: number;
+    reviewCount?: number;
 }
 
 interface DeckBrowserProps {
@@ -182,10 +183,19 @@ export function DeckBrowser({ categoryId, onStudyDeck, refreshTrigger }: DeckBro
                                 </span>
                             )}
                             {deck.newCount !== undefined && deck.newCount > 0 && (
-                                <span className="text-blue-400 font-medium">{deck.newCount} new</span>
+                                <span className="text-blue-400 font-medium text-xs bg-blue-500/10 px-2 py-0.5 rounded">
+                                    {deck.newCount} New
+                                </span>
                             )}
-                            {deck.dueCount !== undefined && deck.dueCount > 0 && (
-                                <span className="text-orange-400 font-medium">{deck.dueCount} due</span>
+                            {deck.learningCount !== undefined && deck.learningCount > 0 && (
+                                <span className="text-red-400 font-medium text-xs bg-red-500/10 px-2 py-0.5 rounded">
+                                    {deck.learningCount} Learn
+                                </span>
+                            )}
+                            {deck.reviewCount !== undefined && deck.reviewCount > 0 && (
+                                <span className="text-emerald-400 font-medium text-xs bg-emerald-500/10 px-2 py-0.5 rounded">
+                                    {deck.reviewCount} Review
+                                </span>
                             )}
                         </div>
                         <div className="flex gap-2">

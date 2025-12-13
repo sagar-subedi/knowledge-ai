@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { documents, flashcards, decks } from "@/lib/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { OpenAI } from "@llamaindex/openai";
 import { logger } from "@/lib/logger";
 import { extractMultipleSections, TOCSection } from "@/lib/toc-extractor";
@@ -105,17 +105,33 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "No content available from selected documents/sections" }, { status: 400 });
         }
 
+        // Fetch existing flashcards to avoid duplicates
+        const existingCards = await db
+            .select({ front: flashcards.front })
+            .from(flashcards)
+            .where(and(eq(flashcards.deckId, deckId), eq(flashcards.userId, userId)))
+            .orderBy(desc(flashcards.createdAt))
+            .limit(50);
+
+        const existingQuestions = existingCards.map(c => c.front).join("\n- ");
+
         // Generate flashcards using OpenAI
         const llm = new OpenAI({ model: "gpt-4o" });
 
-        const prompt = `You are an expert tutor. Create ${count} high-quality flashcards based on the following text.
+        let prompt = `You are an expert tutor. Create ${count} high-quality flashcards based on the following text.
 Each flashcard should have a "front" (question/concept) and a "back" (answer/explanation).
 Focus on key concepts, definitions, and important details.
 
 Return the result as a JSON array of objects with "front" and "back" keys.
-Do not include any markdown formatting or code blocks, just the raw JSON string.
+Do not include any markdown formatting or code blocks, just the raw JSON string.`;
 
-Text:
+        if (existingQuestions) {
+            prompt += `\n\nAVOID DUPLICATES:
+Do not generate flashcards that are semantically similar to the following existing questions:
+- ${existingQuestions}`;
+        }
+
+        prompt += `\n\nText:
 ${context}`;
 
         const response = await llm.complete({ prompt });
